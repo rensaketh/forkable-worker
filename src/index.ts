@@ -29,7 +29,7 @@ type GetRestaurantsAndMealsInput = {
 worker.tool<GetRestaurantsAndMealsInput, DayMealsResult>("getRestaurantsAndMealsForDate", {
 	title: "Get Restaurants And Meals For Date",
 	description:
-		"Returns every available Forkable restaurant and orderable meal for a specific date (YYYY-MM-DD), grouped by delivery location. Use the returned mealId and menuId for exact ordering.",
+		"Returns every available Forkable restaurant and orderable meal for a specific date (YYYY-MM-DD), grouped by delivery location. Use the returned mealId and menuId for exact ordering. A meal line may end with `| prefs forkable:<n> you:<rating> freq:<n> count:<n> avg:<n> last:<r,r,r>`. `forkable` is Forkable's averageRating and is present even for meals this user has never ordered. `you` is their userRating (`-` if unrated). `freq` is how often they have ordered it, `count` is how many times they have rated it, `avg` is their own average (not Forkable's), and `last` is their most recent ratings. When they have no personal rating, use `forkable` to pick a well-rated meal they have not tried. Otherwise prefer meals they rated highly.",
 	schema: j.object({
 		date: j.string().describe("The delivery date to inspect in YYYY-MM-DD format."),
 	}),
@@ -58,7 +58,7 @@ worker.tool<CurrentOrderForDateInput, CurrentOrderForDateResult>("getCurrentOrde
 worker.tool<GetPastOrdersInput, PastOrdersResult>("getPastOrders", {
 	title: "Get Past Orders",
 	description:
-		"Returns your past Forkable meal orders across every delivery location so you can see what you've been ordering. Defaults to the past 10 weeks. Pass weeks to change the window or endDate (YYYY-MM-DD) to anchor to a specific day instead of today.",
+		"Returns your past Forkable meal orders across every delivery location so you can see what you've been ordering. Defaults to the past 10 weeks. Pass weeks to change the window or endDate (YYYY-MM-DD) to anchor to a specific day instead of today. Each order includes averageRating, userRating, and userRatingDetails (frequency, count, avg, last3) from the current menu when that meal is still listed. averageRating is Forkable's crowd score; userRating is what this user thought of it.",
 	schema: j.object({
 		weeks: j
 			.number()

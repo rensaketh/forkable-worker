@@ -85,6 +85,14 @@ interface ForkableModifier {
 	options: ForkableModifierOption[];
 }
 
+export interface UserRatingDetails {
+	frequency: number;
+	count: number;
+	avg: number | null;
+	last3: number[];
+	[key: string]: JsonValue;
+}
+
 interface ForkableMenuItem {
 	id: number;
 	menuId: number;
@@ -92,6 +100,8 @@ interface ForkableMenuItem {
 	description: string;
 	price: number;
 	averageRating: number | null;
+	userRating: number | null;
+	userRatingDetails: UserRatingDetails | null;
 	disabled: boolean;
 	ingredientTags: string[];
 	modifiers: ForkableModifier[];
@@ -258,6 +268,9 @@ export interface PastOrderSummary {
 	state: string;
 	instructions: string | null;
 	selections: string[];
+	averageRating: number | null;
+	userRating: number | null;
+	userRatingDetails: UserRatingDetails | null;
 	[key: string]: JsonValue;
 }
 
@@ -382,6 +395,26 @@ function mealToSummary(item: ForkableMenuItem): MealSummary {
 	};
 }
 
+function formatMealPreferences(item: ForkableMenuItem): string {
+	const userRating = item.userRating ?? null;
+	const details = item.userRatingDetails ?? null;
+	const averageRating = item.averageRating ?? null;
+	const parts: string[] = [];
+	if (averageRating != null) {
+		parts.push(`forkable:${averageRating}`);
+	}
+	if (userRating != null || details != null) {
+		const last = details?.last3?.length ? details.last3.join(",") : "-";
+		parts.push(
+			`you:${userRating ?? "-"} freq:${details?.frequency ?? "-"} count:${details?.count ?? "-"} avg:${details?.avg ?? "-"} last:${last}`,
+		);
+	}
+	if (parts.length === 0) {
+		return "";
+	}
+	return ` | prefs ${parts.join(" ")}`;
+}
+
 function mealToListEntry(item: ForkableMenuItem): string {
 	const summary = mealToSummary(item);
 	const required = (item.modifiers ?? [])
@@ -390,7 +423,7 @@ function mealToListEntry(item: ForkableMenuItem): string {
 	const description = (item.description ?? "").trim();
 	return `${summary.name} [${summary.mealId}/${summary.menuId}] $${summary.price.toFixed(2)}${
 		required.length > 0 ? ` req:${required.join("; ")}` : ""
-	}${summary.hasOptionalSelections ? " opt" : ""}${description ? ` — ${description}` : ""}`;
+	}${summary.hasOptionalSelections ? " opt" : ""}${description ? ` — ${description}` : ""}${formatMealPreferences(item)}`;
 }
 
 function existingOrderPieceForDelivery(
@@ -573,6 +606,8 @@ export class ForkableClient {
 								description
 								price
 								averageRating
+								userRating
+								userRatingDetails { frequency count avg last3 }
 								disabled
 								ingredientTags
 								modifiers {
@@ -843,7 +878,7 @@ export class ForkableClient {
 			menuIdsByClub.set(delivery.mealClubId, set);
 		}
 
-		const descriptionByMenuItem = new Map<string, string>();
+		const menuItemByKey = new Map<string, ForkableMenuItem>();
 		await Promise.all(
 			[...menuIdsByClub.entries()].map(async ([clubId, menuIds]) => {
 				try {
@@ -851,35 +886,39 @@ export class ForkableClient {
 					for (const menu of menus) {
 						for (const section of menu.sections ?? []) {
 							for (const item of section.items ?? []) {
-								const description = (item.description ?? "").trim();
-								if (description) {
-									descriptionByMenuItem.set(`${menu.id}:${item.id}`, description);
-								}
+								menuItemByKey.set(`${menu.id}:${item.id}`, item);
 							}
 						}
 					}
 				} catch {
-					// Old menus may no longer be fetchable — leave descriptions null for those.
+					// Old menus may no longer be fetchable — leave descriptions and ratings null.
 				}
 			}),
 		);
 
-		const orders: PastOrderSummary[] = relevant.map(({ delivery, date, piece }) => ({
-			date,
-			deliveryId: delivery.id,
-			locationId: delivery.mealClubId,
-			locationName: locationName(delivery),
-			mealId: piece.itemId,
-			menuId: piece.menuId,
-			mealName: piece.name,
-			mealDescription: descriptionByMenuItem.get(`${piece.menuId}:${piece.itemId}`) ?? null,
-			price: piece.price,
-			state: piece.state,
-			instructions: piece.instructions,
-			selections: (piece.nonHiddenAttributes ?? []).map(
-				(selection) => `${selection.label}: ${selection.value}`,
-			),
-		}));
+		const orders: PastOrderSummary[] = relevant.map(({ delivery, date, piece }) => {
+			const menuItem = menuItemByKey.get(`${piece.menuId}:${piece.itemId}`);
+			const description = (menuItem?.description ?? "").trim();
+			return {
+				date,
+				deliveryId: delivery.id,
+				locationId: delivery.mealClubId,
+				locationName: locationName(delivery),
+				mealId: piece.itemId,
+				menuId: piece.menuId,
+				mealName: piece.name,
+				mealDescription: description || null,
+				price: piece.price,
+				state: piece.state,
+				instructions: piece.instructions,
+				selections: (piece.nonHiddenAttributes ?? []).map(
+					(selection) => `${selection.label}: ${selection.value}`,
+				),
+				averageRating: menuItem?.averageRating ?? null,
+				userRating: menuItem?.userRating ?? null,
+				userRatingDetails: menuItem?.userRatingDetails ?? null,
+			};
+		});
 
 		orders.sort((left, right) =>
 			left.date === right.date

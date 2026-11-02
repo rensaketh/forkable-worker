@@ -67,6 +67,8 @@ describe("ForkableClient", () => {
 										description: "Grain bowl",
 										price: 18,
 										averageRating: 4.7,
+										userRating: 5,
+										userRatingDetails: { frequency: 3, count: 2, avg: 4.5, last3: [5, 4] },
 										disabled: false,
 										ingredientTags: ["gluten-free"],
 										modifiers: [],
@@ -101,8 +103,23 @@ describe("ForkableClient", () => {
 										description: "Tofu bowl",
 										price: 17,
 										averageRating: null,
+										userRating: null,
+										userRatingDetails: { frequency: 1, count: 0, avg: null, last3: [] },
 										disabled: false,
 										ingredientTags: ["vegan"],
+										modifiers: [],
+									},
+									{
+										id: 503,
+										menuId: 11,
+										name: "Miso Soup",
+										description: "Soup",
+										price: 6,
+										averageRating: 4.2,
+										userRating: null,
+										userRatingDetails: null,
+										disabled: false,
+										ingredientTags: [],
 										modifiers: [],
 									},
 								],
@@ -120,7 +137,7 @@ describe("ForkableClient", () => {
 				deliveryCount: 1,
 				editableDeliveryCount: 0,
 				restaurantCount: 1,
-				mealCount: 2,
+				mealCount: 3,
 			});
 			expect(result.deliveries[0]).toMatchObject({
 				deliveryId: 100,
@@ -132,11 +149,19 @@ describe("ForkableClient", () => {
 				{
 					restaurantName: "Cafe Good",
 					meals: [
-						"Chicken Bowl [501/10] $18.00 — Grain bowl",
-						"Tofu Bowl [502/11] $17.00 — Tofu bowl",
+						"Chicken Bowl [501/10] $18.00 — Grain bowl | prefs forkable:4.7 you:5 freq:3 count:2 avg:4.5 last:5,4",
+						"Miso Soup [503/11] $6.00 — Soup | prefs forkable:4.2",
+						"Tofu Bowl [502/11] $17.00 — Tofu bowl | prefs you:- freq:1 count:0 avg:- last:-",
 					],
 				},
 			]);
+
+			const menusQuery = JSON.parse(mockFetch.mock.calls[1][1].body as string) as {
+				query: string;
+			};
+			expect(menusQuery.query).toContain("averageRating");
+			expect(menusQuery.query).toContain("userRating");
+			expect(menusQuery.query).toContain("userRatingDetails { frequency count avg last3 }");
 		});
 	});
 
@@ -400,7 +425,9 @@ describe("ForkableClient", () => {
 										name: "Chicken Bowl",
 										description: "Grain bowl with chicken",
 										price: 18,
-										averageRating: null,
+										averageRating: 4.7,
+										userRating: 4,
+										userRatingDetails: { frequency: 2, count: 1, avg: 4, last3: [4] },
 										disabled: false,
 										ingredientTags: [],
 										modifiers: [],
@@ -437,6 +464,9 @@ describe("ForkableClient", () => {
 						state: "delivered",
 						instructions: "extra hot",
 						selections: ["Choose Side: Rice"],
+						averageRating: 4.7,
+						userRating: 4,
+						userRatingDetails: { frequency: 2, count: 1, avg: 4, last3: [4] },
 					},
 				],
 			});

@@ -101,7 +101,7 @@ interface ForkableMenuItem {
 	price: number;
 	averageRating: number | null;
 	userRating: number | null;
-	userRatingDetails: UserRatingDetails | null;
+	userRatingDetails: JsonValue;
 	disabled: boolean;
 	ingredientTags: string[];
 	modifiers: ForkableModifier[];
@@ -395,9 +395,34 @@ function mealToSummary(item: ForkableMenuItem): MealSummary {
 	};
 }
 
+function readUserRatingDetails(value: JsonValue | undefined): UserRatingDetails | null {
+	let parsed: JsonValue | undefined = value;
+	if (typeof value === "string") {
+		try {
+			parsed = JSON.parse(value) as JsonValue;
+		} catch {
+			return null;
+		}
+	}
+	if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+		return null;
+	}
+
+	const last3 = Array.isArray(parsed.last3)
+		? parsed.last3.filter((entry): entry is number => typeof entry === "number")
+		: [];
+	const avg = parsed.avg;
+	return {
+		frequency: typeof parsed.frequency === "number" ? parsed.frequency : 0,
+		count: typeof parsed.count === "number" ? parsed.count : 0,
+		avg: typeof avg === "number" ? avg : null,
+		last3,
+	};
+}
+
 function formatMealPreferences(item: ForkableMenuItem): string {
 	const userRating = item.userRating ?? null;
-	const details = item.userRatingDetails ?? null;
+	const details = readUserRatingDetails(item.userRatingDetails);
 	const averageRating = item.averageRating ?? null;
 	const parts: string[] = [];
 	if (averageRating != null) {
@@ -607,7 +632,7 @@ export class ForkableClient {
 								price
 								averageRating
 								userRating
-								userRatingDetails { frequency count avg last3 }
+								userRatingDetails
 								disabled
 								ingredientTags
 								modifiers {
@@ -916,7 +941,7 @@ export class ForkableClient {
 				),
 				averageRating: menuItem?.averageRating ?? null,
 				userRating: menuItem?.userRating ?? null,
-				userRatingDetails: menuItem?.userRatingDetails ?? null,
+				userRatingDetails: readUserRatingDetails(menuItem?.userRatingDetails),
 			};
 		});
 

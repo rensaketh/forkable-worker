@@ -161,7 +161,8 @@ describe("ForkableClient", () => {
 			};
 			expect(menusQuery.query).toContain("averageRating");
 			expect(menusQuery.query).toContain("userRating");
-			expect(menusQuery.query).toContain("userRatingDetails { frequency count avg last3 }");
+			expect(menusQuery.query).toContain("userRatingDetails");
+			expect(menusQuery.query).not.toContain("userRatingDetails {");
 		});
 	});
 

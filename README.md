@@ -4,9 +4,9 @@
 
 ## What This Repo Can Do
 
-- Expose `getRestaurantsAndMealsForDate` to list every orderable meal for a `YYYY-MM-DD` date, grouped by delivery location and restaurant, with price and description inline.
+- Expose `getRestaurantsAndMealsForDate` to list every orderable meal for a `YYYY-MM-DD` date, grouped by delivery location and restaurant, with price, description, Forkable's crowd rating, and your own rating inline.
 - Expose `getCurrentOrderForDate` to show your current order for a date, optionally narrowed to one location.
-- Expose `getPastOrders` to look back at your order history across all delivery locations (defaults to the last 10 weeks) so you can review what you've been ordering.
+- Expose `getPastOrders` to look back at your order history across all delivery locations (defaults to the last 10 weeks), including your rating and Forkable's crowd rating when that meal is still on the menu.
 - Expose `orderMealForDate` to place or replace an editable order by exact `mealId` + `menuId` or by a meal-name search.
 - Validate date format, location filters, ambiguous meal matches, and required Forkable modifier selections before sending an order.
 - Return structured results that are suitable for a Notion worker tool surface.
@@ -15,7 +15,7 @@
 
 - [`src/index.ts`](./src/index.ts) registers the worker and its four public tools.
 - [`src/forkable.ts`](./src/forkable.ts) wraps the Forkable GraphQL API and contains the matching, validation, and order-submission logic.
-- [`src/forkable.test.ts`](./src/forkable.test.ts) covers the main behavior: menu listing, current-order lookup, past-order history, exact ordering, ambiguity handling, and required selection validation.
+- [`src/forkable.test.ts`](./src/forkable.test.ts) covers the main behavior: menu listing, rating formatting, current-order lookup, past-order history, exact ordering, ambiguity handling, and required selection validation.
 
 The worker authenticates by sending your Forkable `_easyorder_session` cookie as the value of `FORKABLE_SESSION_COOKIE`. The worker acts as the Forkable user tied to that session.
 
@@ -36,7 +36,10 @@ What it returns:
 - Deliveries for that date.
 - Each delivery's location metadata.
 - Restaurants and meals available at that location.
-- Meal list entries formatted as `<name> [<mealId>/<menuId>] $<price> [req:<modifier>] [opt] — <description>`, which include the exact `mealId` and `menuId` to use when ordering.
+- Meal list entries formatted as `<name> [<mealId>/<menuId>] $<price> [req:<modifier>] [opt] — <description> [| prefs ...]`, which include the exact `mealId` and `menuId` to use when ordering.
+- A `| prefs` suffix when Forkable has a crowd score or you have ordered or rated the meal. `forkable:<n>` is Forkable's `averageRating` and can appear on meals you have never ordered. `you:<n>` is your `userRating` (`-` if you ordered it and did not rate it). `freq` is how often you have ordered it, `count` is how many times you have rated it, `avg` is your average (not Forkable's), and `last` is your most recent ratings, up to 3. Meals with no crowd score and no personal history have no `| prefs` suffix.
+
+`userRatingDetails` comes back from Forkable as one JSON value (`frequency`, `count`, `avg`, `last3`), not as separate GraphQL fields.
 
 ### `getCurrentOrderForDate`
 
@@ -73,6 +76,7 @@ What it returns:
 
 - A flat list of your past orders within the window, newest first.
 - Each order includes the delivery date, location, meal name and description, price, state, instructions, and chosen selections.
+- Each order also includes `averageRating`, `userRating`, and `userRatingDetails` (`frequency`, `count`, `avg`, `last3`) looked up from the current menu. `averageRating` is Forkable's crowd score. `userRating` is your rating. If a menu is no longer fetchable, those fields are `null`.
 - The descriptions are looked up from each delivery's menu (grouped per meal club), so they reflect what the meal was when you ordered it; if a menu is no longer fetchable, `mealDescription` is `null`.
 
 Notes:

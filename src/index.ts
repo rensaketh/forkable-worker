@@ -41,7 +41,7 @@ worker.tool<GetRestaurantsAndMealsInput, DayMealsResult>("getRestaurantsAndMeals
 worker.tool<CurrentOrderForDateInput, CurrentOrderForDateResult>("getCurrentOrderForDate", {
 	title: "Get Current Order For Date",
 	description:
-		"Returns your current Forkable order for a specific date, grouped by delivery location. Use locationId or locationName to narrow it to one office when needed.",
+		"Returns your current Forkable meals for a specific date, grouped by delivery location. `orders` lists every meal on that delivery. `order` is the first of those meals. Use locationId or locationName to narrow it to one office when needed.",
 	schema: j.object({
 		date: j.string().describe("The delivery date to inspect in YYYY-MM-DD format."),
 		locationId: j.number().nullable().describe("Optional Forkable location/meal club ID filter."),
@@ -77,7 +77,7 @@ worker.tool<GetPastOrdersInput, PastOrdersResult>("getPastOrders", {
 worker.tool<OrderMealInput, OrderMealResult>("orderMealForDate", {
 	title: "Order Meal For Date",
 	description:
-		"Orders or replaces a Forkable meal for a specific date. Prefer passing exact mealId + menuId from getRestaurantsAndMealsForDate. mealName search is also supported, and location or restaurant filters can disambiguate.",
+		"Orders a Forkable meal for a specific date, or replaces the existing meal on that delivery. Prefer passing exact mealId + menuId from getRestaurantsAndMealsForDate. mealName search is also supported, and location or restaurant filters can disambiguate. To keep the current meal and add another one, use addMealForDate instead.",
 	schema: j.object({
 		date: j.string().describe("The delivery date to order for in YYYY-MM-DD format."),
 		mealName: j
@@ -105,5 +105,39 @@ worker.tool<OrderMealInput, OrderMealResult>("orderMealForDate", {
 	}),
 	execute: async (input) => {
 		return getClient().orderMealForDate(input);
+	},
+});
+
+worker.tool<OrderMealInput, OrderMealResult>("addMealForDate", {
+	title: "Add Meal For Date",
+	description:
+		"Adds another Forkable meal for a specific date without replacing meals already ordered. Use this to order a second meal toward the $25 allowance. If nothing is ordered yet, this places the first meal. Prefer exact mealId + menuId from getRestaurantsAndMealsForDate. Do not use orderMealForDate for this, because that tool replaces the existing meal.",
+	schema: j.object({
+		date: j.string().describe("The delivery date to order for in YYYY-MM-DD format."),
+		mealName: j
+			.string()
+			.nullable()
+			.describe("Meal name search string. Use this or exact mealId + menuId."),
+		mealId: j.number().nullable().describe("Exact Forkable meal item ID."),
+		menuId: j.number().nullable().describe("Exact Forkable menu ID for the selected meal."),
+		restaurantName: j.string().nullable().describe("Optional restaurant name filter."),
+		locationId: j.number().nullable().describe("Optional Forkable location/meal club ID filter."),
+		locationName: j
+			.string()
+			.nullable()
+			.describe("Optional delivery location name filter, such as 'NY' or 'SF'."),
+		instructions: j.string().nullable().describe("Optional special instructions for the order."),
+		selections: j
+			.array(
+				j.object({
+					modifier: j.string().describe("Modifier name, such as 'Choose Side'."),
+					option: j.string().describe("Chosen option for that modifier."),
+				}),
+			)
+			.nullable()
+			.describe("Optional modifier selections to apply to the ordered meal."),
+	}),
+	execute: async (input) => {
+		return getClient().addMealForDate(input);
 	},
 });

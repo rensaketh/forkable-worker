@@ -204,6 +204,7 @@ export interface CurrentOrderDelivery {
 	locationAddress: string;
 	isReadOnly: boolean;
 	order: CurrentOrderSummary | null;
+	orders: CurrentOrderSummary[];
 	[key: string]: JsonValue;
 }
 
@@ -451,15 +452,20 @@ function mealToListEntry(item: ForkableMenuItem): string {
 	}${summary.hasOptionalSelections ? " opt" : ""}${description ? ` — ${description}` : ""}${formatMealPreferences(item)}`;
 }
 
+function existingOrderPiecesForDelivery(
+	delivery: ForkableDelivery,
+	userEmail: string,
+): ForkableOrderPiece[] {
+	return delivery.orders
+		.flatMap((order) => order.pieces)
+		.filter((candidate) => normalized(candidate.user.email) === normalized(userEmail));
+}
+
 function existingOrderPieceForDelivery(
 	delivery: ForkableDelivery,
 	userEmail: string,
 ): ForkableOrderPiece | null {
-	return (
-		delivery.orders
-			.flatMap((order) => order.pieces)
-			.find((candidate) => normalized(candidate.user.email) === normalized(userEmail)) ?? null
-	);
+	return existingOrderPiecesForDelivery(delivery, userEmail)[0] ?? null;
 }
 
 function restaurantNameForOrderPiece(
@@ -711,14 +717,13 @@ export class ForkableClient {
 
 		const summarizedDeliveries = await Promise.all(
 			deliveries.map(async (delivery) => {
-				const existingOrder = existingOrderPieceForDelivery(delivery, viewer.email);
-				let order: CurrentOrderSummary | null = null;
+				const pieces = existingOrderPiecesForDelivery(delivery, viewer.email);
+				let orders: CurrentOrderSummary[] = [];
 
-				if (existingOrder) {
+				if (pieces.length > 0) {
 					const menus = await this.getMenus(delivery.availableMenuIds, delivery.mealClubId);
-					order = summarizeCurrentOrder(
-						existingOrder,
-						restaurantNameForOrderPiece(existingOrder, menus),
+					orders = pieces.map((piece) =>
+						summarizeCurrentOrder(piece, restaurantNameForOrderPiece(piece, menus)),
 					);
 				}
 
@@ -729,7 +734,8 @@ export class ForkableClient {
 					locationName: locationName(delivery),
 					locationAddress: delivery.address.formatted,
 					isReadOnly: delivery.isReadOnly,
-					order,
+					order: orders[0] ?? null,
+					orders,
 				};
 			}),
 		);
@@ -737,7 +743,7 @@ export class ForkableClient {
 		return {
 			date: input.date,
 			deliveryCount: summarizedDeliveries.length,
-			orderCount: summarizedDeliveries.filter((delivery) => delivery.order !== null).length,
+			orderCount: summarizedDeliveries.reduce((count, delivery) => count + delivery.orders.length, 0),
 			deliveries: summarizedDeliveries.sort((left, right) =>
 				left.locationName === right.locationName
 					? left.deliveryId - right.deliveryId
@@ -888,12 +894,10 @@ export class ForkableClient {
 				continue;
 			}
 
-			const piece = existingOrderPieceForDelivery(delivery, viewer.email);
-			if (!piece) {
-				continue;
+			const pieces = existingOrderPiecesForDelivery(delivery, viewer.email);
+			for (const piece of pieces) {
+				relevant.push({ delivery, date, piece });
 			}
-
-			relevant.push({ delivery, date, piece });
 		}
 
 		const menuIdsByClub = new Map<number, Set<number>>();
@@ -960,7 +964,18 @@ export class ForkableClient {
 		};
 	}
 
+	async addMealForDate(input: OrderMealInput): Promise<OrderMealResult> {
+		return this.placeMeal(input, "add");
+	}
+
 	async orderMealForDate(input: OrderMealInput): Promise<OrderMealResult> {
+		return this.placeMeal(input, "replace");
+	}
+
+	private async placeMeal(
+		input: OrderMealInput,
+		mode: "add" | "replace",
+	): Promise<OrderMealResult> {
 		assertIsoDate(input.date);
 
 		if (!input.mealName && (input.mealId == null || input.menuId == null)) {
@@ -1026,7 +1041,8 @@ export class ForkableClient {
 
 		try {
 			const viewer = await this.getViewer();
-			existingOrder = existingOrderPieceForDelivery(delivery, viewer.email);
+			const existingOrders = existingOrderPiecesForDelivery(delivery, viewer.email);
+			existingOrder = mode === "replace" ? (existingOrders[0] ?? null) : null;
 			const { selectionsHash, appliedSelections: normalizedSelections } = this.buildSelectionsHash(
 				item,
 				input.selections,
@@ -1093,7 +1109,10 @@ export class ForkableClient {
 
 			return {
 				success: true,
-				message: `Ordered "${item.name}" for ${input.date} at ${locationName(delivery)}.`,
+				message:
+					mode === "add"
+						? `Added "${item.name}" for ${input.date} at ${locationName(delivery)} without replacing existing meals.`
+						: `Ordered "${item.name}" for ${input.date} at ${locationName(delivery)}.`,
 				date: input.date,
 				deliveryId: delivery.id,
 				locationId: delivery.mealClubId,

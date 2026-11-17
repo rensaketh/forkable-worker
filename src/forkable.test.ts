@@ -195,6 +195,17 @@ describe("ForkableClient", () => {
 										user: { email: "user@example.com" },
 										nonHiddenAttributes: [{ label: "Protein", value: "Chicken" }],
 									},
+									{
+										id: "piece-ny-2",
+										itemId: 502,
+										menuId: 10,
+										name: "Spring Rolls",
+										price: 8,
+										state: "ordered",
+										instructions: null,
+										user: { email: "user@example.com" },
+										nonHiddenAttributes: [],
+									},
 								],
 							},
 						],
@@ -233,7 +244,7 @@ describe("ForkableClient", () => {
 			expect(result).toEqual({
 				date: "2025-09-22",
 				deliveryCount: 2,
-				orderCount: 1,
+				orderCount: 2,
 				deliveries: [
 					{
 						deliveryId: 200,
@@ -253,6 +264,30 @@ describe("ForkableClient", () => {
 							instructions: "extra lime",
 							selections: ["Protein: Chicken"],
 						},
+						orders: [
+							{
+								pieceId: "piece-ny",
+								mealId: 501,
+								menuId: 10,
+								mealName: "Lemongrass Chicken Pho",
+								restaurantName: "Pho Place",
+								price: 17.5,
+								state: "ordered",
+								instructions: "extra lime",
+								selections: ["Protein: Chicken"],
+							},
+							{
+								pieceId: "piece-ny-2",
+								mealId: 502,
+								menuId: 10,
+								mealName: "Spring Rolls",
+								restaurantName: "Pho Place",
+								price: 8,
+								state: "ordered",
+								instructions: null,
+								selections: [],
+							},
+						],
 					},
 					{
 						deliveryId: 201,
@@ -262,6 +297,7 @@ describe("ForkableClient", () => {
 						locationAddress: expect.any(String),
 						isReadOnly: true,
 						order: null,
+						orders: [],
 					},
 				],
 			});
@@ -316,6 +352,7 @@ describe("ForkableClient", () => {
 						locationAddress: expect.any(String),
 						isReadOnly: true,
 						order: null,
+						orders: [],
 					},
 				],
 			});
@@ -632,6 +669,110 @@ describe("ForkableClient", () => {
 				},
 				myMeals: true,
 				oldPieceId: "old-piece",
+			});
+		});
+
+		it("adds a second meal with addPiece when one is already ordered", async () => {
+			mockGraphQL({
+				myDeliveries: [
+					{
+						id: 123,
+						forDeliveryAt: "2026-03-05T12:00:00.000Z",
+						isReadOnly: false,
+						mealClubId: 3916,
+						availableMenuIds: [10],
+						address: { formatted: "<address>" },
+						club: { id: 3916, name: "NY" },
+						orders: [
+							{
+								pieces: [
+									{
+										id: "old-piece",
+										itemId: 40,
+										menuId: 9,
+										name: "Old Meal",
+										price: 15,
+										state: "ordered",
+										instructions: null,
+										user: { email: "user@example.com" },
+										nonHiddenAttributes: [],
+									},
+								],
+							},
+						],
+					},
+				],
+			});
+			mockGraphQL({
+				menus: [
+					{
+						id: 10,
+						name: "menu-10",
+						displayName: "Green Kitchen",
+						venue: { id: 800, name: "green-kitchen", displayName: "Green Kitchen" },
+						sections: [
+							{
+								items: [
+									{
+										id: 55,
+										menuId: 10,
+										name: "Salmon Plate",
+										description: "Fresh salmon",
+										price: 21.5,
+										averageRating: 4.9,
+										disabled: false,
+										ingredientTags: ["fish"],
+										modifiers: [],
+									},
+								],
+							},
+						],
+					},
+				],
+			});
+			mockGraphQL({
+				me: { id: 1, email: "user@example.com" },
+			});
+			mockGraphQL({
+				result: {
+					errors: null,
+					errorDetails: {},
+					delivery: {
+						id: 123,
+						forDeliveryAt: "2026-03-05T12:00:00.000Z",
+						address: { formatted: "<address>" },
+						orders: [],
+					},
+				},
+			});
+
+			const client = new ForkableClient(SESSION_COOKIE);
+			const result = await client.addMealForDate({
+				...exactOrderInput(),
+				selections: null,
+				instructions: null,
+			});
+
+			expect(result).toMatchObject({
+				success: true,
+				replacedExistingOrder: false,
+				message: expect.stringContaining("without replacing"),
+			});
+
+			const addPieceBody = JSON.parse(mockFetch.mock.calls[3][1].body as string) as {
+				query: string;
+				variables: { input: Record<string, unknown> };
+			};
+			expect(addPieceBody.query).toContain("result: addPiece");
+			expect(addPieceBody.query).not.toContain("replacePiece");
+			expect(addPieceBody.variables.input).toEqual({
+				deliveryId: 123,
+				itemId: 55,
+				menuId: 10,
+				userId: 1,
+				instructions: null,
+				selectionsHash: {},
+				myMeals: true,
 			});
 		});
 

@@ -1,19 +1,20 @@
 # forkable-worker
 
-`forkable-worker` is a TypeScript Notion Worker that turns Forkable lunch ordering into worker tools. It authenticates to Forkable with your session cookie, reads the available menus for a date, shows your current and past orders, and can place or replace a meal order on your behalf.
+`forkable-worker` is a TypeScript Notion Worker that turns Forkable lunch ordering into worker tools. It authenticates to Forkable with your session cookie, reads the available menus for a date, shows your current and past orders, and can place, add, or replace a meal order on your behalf.
 
 ## What This Repo Can Do
 
 - Expose `getRestaurantsAndMealsForDate` to list every orderable meal for a `YYYY-MM-DD` date, grouped by delivery location and restaurant, with price, description, Forkable's crowd rating, and your own rating inline.
-- Expose `getCurrentOrderForDate` to show your current order for a date, optionally narrowed to one location.
+- Expose `getCurrentOrderForDate` to show every current meal for a date, optionally narrowed to one location.
 - Expose `getPastOrders` to look back at your order history across all delivery locations (defaults to the last 10 weeks), including your rating and Forkable's crowd rating when that meal is still on the menu.
 - Expose `orderMealForDate` to place or replace an editable order by exact `mealId` + `menuId` or by a meal-name search.
+- Expose `addMealForDate` to add another meal on the same delivery without replacing the ones already ordered.
 - Validate date format, location filters, ambiguous meal matches, and required Forkable modifier selections before sending an order.
 - Return structured results that are suitable for a Notion worker tool surface.
 
 ## How It Works
 
-- [`src/index.ts`](./src/index.ts) registers the worker and its four public tools.
+- [`src/index.ts`](./src/index.ts) registers the worker and its five public tools.
 - [`src/forkable.ts`](./src/forkable.ts) wraps the Forkable GraphQL API and contains the matching, validation, and order-submission logic.
 - [`src/forkable.test.ts`](./src/forkable.test.ts) covers the main behavior: menu listing, rating formatting, current-order lookup, past-order history, exact ordering, ambiguity handling, and required selection validation.
 
@@ -55,7 +56,7 @@ Input:
 
 What it returns:
 
-- Your current order, if any, for each delivery on that date.
+- Every current meal on each delivery for that date, in `orders`. `order` is the first of those meals.
 - The delivery location and address.
 - Chosen selections and any special instructions on the existing order.
 
@@ -112,6 +113,17 @@ Behavior:
 - Orders only editable deliveries.
 - Replaces an existing order for the same delivery if one already exists.
 - Fails with a clear error when multiple meals match or when required modifier selections are missing.
+
+### `addMealForDate`
+
+Same input as `orderMealForDate`.
+
+Behavior:
+
+- Always calls Forkable's `addPiece`, so meals already ordered on that delivery stay in place.
+- Use this to order a second meal toward the $25 allowance.
+- If nothing is ordered yet, this places the first meal.
+- Uses the same meal matching, location filters, and required-modifier checks as `orderMealForDate`.
 
 ## Local Setup
 
